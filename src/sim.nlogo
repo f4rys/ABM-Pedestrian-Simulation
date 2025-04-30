@@ -3,16 +3,6 @@
 globals [
   total-agents-created      ; Counter for all created agents
   total-agents-reached-goal ; Counter for agents who reached the goal
-
-  ; Simulation control parameters
-  min-desired-speed         ; Minimum desired speed
-  max-desired-speed         ; Maximum desired speed
-  min-patience              ; Minimum patience
-  max-patience              ; Maximum patience
-  min-avoidance-radius      ; Minimum avoidance radius
-  max-avoidance-radius      ; Maximum avoidance radius
-  min-wiggle-angle          ; Minimum wiggle angle
-  max-wiggle-angle          ; Maximum wiggle angle
 ]
 
 patches-own [
@@ -21,11 +11,6 @@ patches-own [
   is-obstacle?              ; Is the cell an obstacle (building, road)? (Boolean)
   is-goal-area?             ; Does the cell belong to the goal area? (Boolean)
   is-spawn-area?            ; Does the cell belong to the agent spawn area? (Boolean)
-
-  ; Dynamic/auxiliary information
-  static-potential          ; Static potential (e.g., distance to goal, attractiveness) - for navigation use
-  local-density             ; Local agent density (calculated periodically)
-  road-segment-id           ; Road/sidewalk segment identifier (if needed for analysis)
 ]
 
 turtles-own [
@@ -417,6 +402,126 @@ initial-agent-number
 1
 1000
 1000.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+180
+202
+334
+235
+min-desired-speed
+min-desired-speed
+0.5
+1.5
+0.7
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+343
+203
+507
+236
+max-desired-speed
+max-desired-speed
+0.5
+1.5
+0.8
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+179
+245
+333
+278
+min-patience
+min-patience
+50
+150
+60.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+342
+246
+508
+279
+max-patience
+max-patience
+50
+150
+70.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+179
+288
+335
+321
+min-avoidance-radius
+min-avoidance-radius
+1
+3
+1.5
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+341
+287
+509
+320
+max-avoidance-radius
+max-avoidance-radius
+1
+3
+2.5
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+178
+330
+336
+363
+min-wiggle-angle
+min-wiggle-angle
+10
+50
+35.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+342
+331
+509
+364
+max-wiggle-angle
+max-wiggle-angle
+10
+50
+45.0
 1
 1
 NIL
