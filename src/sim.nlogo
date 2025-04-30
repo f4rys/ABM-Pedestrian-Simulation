@@ -162,14 +162,14 @@ to setup-pedestrians
     set total-agents-created total-agents-created + 1
 
     ; --- Assign Heterogeneous Attributes ("Personality") ---
-    ; Assign random desired speed within a range
-    set desired-speed (0.8 + random-float 0.7) ;
+    ; Assign random desired speed within the global range
+    set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
 
-    ; Assign other heterogeneous parameters
-    set patience (50 + random 100) ; ticks willing to wait
-    set density-sensitivity (0.5 + random-float 0.5) ; Factor for slowing down
-    set avoidance-radius (1 + random-float 2) ; Perception/avoidance range
-    set wiggle-angle (10 + random 30) ; Max degrees to randomly turn
+    ; Assign other heterogeneous parameters using global ranges
+    set patience (min-patience + random (max-patience - min-patience + 1)) ; Use random for integer range
+    set density-sensitivity (0.5 + random-float 0.5) ; Factor for slowing down (Keep as is for now, or define globals if needed)
+    set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
+    set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle + 1)) ; Use random for integer range
 
     ; --- Initial Position and Goal ---
     ; Place agents randomly in a spawn area
