@@ -347,10 +347,10 @@ to move
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-434
-75
-1342
-624
+539
+21
+1447
+570
 -1
 -1
 3.0
@@ -374,10 +374,10 @@ ticks
 30.0
 
 BUTTON
-54
-32
-287
-65
+181
+61
+508
+94
 setup
 setup
 NIL
@@ -391,10 +391,10 @@ NIL
 1
 
 BUTTON
-55
-80
-287
-113
+181
+109
+509
+142
 go
 go
 T
@@ -408,10 +408,10 @@ NIL
 1
 
 SLIDER
-54
-128
-291
-161
+180
+157
+510
+190
 initial-agent-number
 initial-agent-number
 1
