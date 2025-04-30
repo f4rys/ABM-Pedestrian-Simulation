@@ -166,10 +166,10 @@ to setup-pedestrians
     set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
 
     ; Assign other heterogeneous parameters using global ranges
-    set patience (min-patience + random (max-patience - min-patience + 1)) ; Use random for integer range
-    set density-sensitivity (0.5 + random-float 0.5) ; Factor for slowing down (Keep as is for now, or define globals if needed)
+    set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
+    set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
     set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
-    set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle + 1)) ; Use random for integer range
+    set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
 
     ; --- Initial Position and Goal ---
     ; Place agents randomly in a spawn area
@@ -523,6 +523,36 @@ max-wiggle-angle
 50
 45.0
 1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+178
+372
+336
+405
+min-density-sensitivity
+min-density-sensitivity
+0.5
+1.5
+0.6
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+341
+372
+510
+405
+max-density-sensitivity
+max-density-sensitivity
+0.5
+1.5
+0.8
+0.1
 1
 NIL
 HORIZONTAL
