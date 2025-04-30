@@ -162,10 +162,8 @@ to setup-pedestrians
     set total-agents-created total-agents-created + 1
 
     ; --- Assign Heterogeneous Attributes ("Personality") ---
-    ; Assign random desired speed within the global range
+    ; Assign random parameters values within specified ranges
     set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
-
-    ; Assign other heterogeneous parameters using global ranges
     set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
     set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
     set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
@@ -319,7 +317,6 @@ to move
     ; wiggle always active when moving
     rt random-float (wiggle-angle / 2)
     lt random-float (wiggle-angle / 2)
-
     ; Basic forward movement
     fd current-speed
   ]
@@ -327,7 +324,7 @@ to move
   ; Check if goal is reached
   if patch-here = my-goal-patch [
      set total-agents-reached-goal total-agents-reached-goal + 1
-     die ; Agent reached goal
+     die ; Agent reached goal #TODO: Consider setting another goal
   ]
 end
 @#$#@#$#@
