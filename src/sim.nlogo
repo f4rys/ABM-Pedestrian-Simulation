@@ -86,6 +86,7 @@ to setup-environment
   let new-min-pycor (new-max-pycor - map-height + 1)
 
   resize-world new-min-pxcor new-max-pxcor new-min-pycor new-max-pycor
+  __change-topology false false ; Disable world wrapping
   set-patch-size (max (list 3 (200 / max (list map-width map-height))))
 
   ; --- Assign Patch Properties based on Map ---
@@ -496,8 +497,8 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
-1
+0
+0
 1
 -150
 149
