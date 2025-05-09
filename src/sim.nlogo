@@ -3,7 +3,6 @@
 globals [
   total-agents-created      ; Counter for all created agents
   total-agents-reached-goal ; Counter for agents who reached the goal
-  move-countdown-static ; Static countdown for all agents (for staggered start)
 ]
 
 patches-own [
@@ -41,7 +40,6 @@ turtles-own [
   my-path                   ; List of patches representing the calculated path (List)
   path-index                ; Current index in my-path the agent is heading towards (Number)
   needs-path-recalculation? ; Flag to signal the observer to recalculate path (Boolean)
-  move-countdown            ; Ticks until the next allowed move
 ]
 
 ; --- SETUP PROCEDURES ---
@@ -49,7 +47,6 @@ to setup
   clear-all
   set total-agents-created 0
   set total-agents-reached-goal 0
-  set move-countdown-static 0
   setup-environment
   setup-pedestrians
   reset-ticks
@@ -209,7 +206,6 @@ to setup-pedestrians
       set neighbors-in-radius no-turtles
       set is-able-to-move? true
       set needs-path-recalculation? false ; Initialize the new flag
-      set move-countdown move-countdown-static ; Initialize countdown for staggered start
     ]
   ]
 end
@@ -217,12 +213,8 @@ end
 ; --- GO PROCEDURE (Main Simulation Loop) ---
 to go
   ask turtles [
-    set move-countdown move-countdown - 1
-    if move-countdown <= 0 [
       decide-movement
       move
-      set move-countdown move-countdown-static ; Reset for next move
-    ]
   ]
 
   ; --- Handle Path Recalculations ---
