@@ -37,6 +37,7 @@ turtles-own [
   is-able-to-move?          ; Can the agent move in this step? (Boolean)
 
   ; --- Pathfinding ---
+  stuck-timer               ; Counter for how long an agent is stuck (Number)
   my-path                   ; List of patches representing the calculated path (List)
   path-index                ; Current index in my-path the agent is heading towards (Number)
   needs-path-recalculation? ; Flag to signal the observer to recalculate path (Boolean)
@@ -206,6 +207,7 @@ to setup-pedestrians
       set neighbors-in-radius no-turtles
       set is-able-to-move? true
       set needs-path-recalculation? false ; Initialize the new flag
+      set stuck-timer 0 ; Initialize stuck timer
     ]
   ]
 end
@@ -352,6 +354,7 @@ to decide-movement
     rt 45                       ; Turn right by 45 degrees (can be adjusted)
     set needs-path-recalculation? true ; Signal observer to recalculate path
     set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
+    set stuck-timer stuck-timer + 1
   ] ifelse is-turtle-ahead? [
     ; Another turtle is directly ahead (but no fixed obstacle)
     ; Attempt to avoid the other turtle using side-stepping or random turns
@@ -407,6 +410,7 @@ to decide-movement
        set heading original-heading ; Face original intended direction if all avoidance failed
        set current-speed 0          ; Cannot move this tick
        set neighbors-in-radius no-turtles
+       set stuck-timer stuck-timer + 1 ; Increment stuck timer if unable to move due to another turtle
     ]  [
        ; A clear path was found after turtle avoidance
        ; is-able-to-move? is true, current-state and time-waiting are already set
@@ -422,6 +426,7 @@ to decide-movement
        let speed-factor max (list 0 (1 - density-factor))
        set current-speed min (list desired-speed 1.0) * speed-factor
        set current-speed max (list 0 current-speed)
+       set stuck-timer 0 ; Reset stuck timer if able to move
     ]
   ] [
     ; Path directly ahead is clear (no fixed obstacle, no turtle)
@@ -438,6 +443,16 @@ to decide-movement
     let speed-factor max (list 0 (1 - density-factor))
     set current-speed min (list desired-speed 1.0) * speed-factor
     set current-speed max (list 0 current-speed)
+    set stuck-timer 0 ; Reset stuck timer if able to move
+  ]
+
+  ; --- Check if agent is stuck for too long ---
+  if stuck-timer > patience [ ; If stuck for more than patience level
+    ; Try a more drastic evasive maneuver
+    rt (random-float 180) - 90 ; Turn a random angle between -90 and 90 degrees
+    fd 1 ; Try to move one step
+    set needs-path-recalculation? true ; Recalculate path after this desperation move
+    set stuck-timer 0 ; Reset stuck timer after attempting to unstick
   ]
 end
 
@@ -580,9 +595,9 @@ SLIDER
 278
 min-patience
 min-patience
-50
-150
-60.0
+1
+10
+5.0
 1
 1
 NIL
@@ -595,9 +610,9 @@ SLIDER
 279
 max-patience
 max-patience
-50
-150
-70.0
+1
+10
+7.0
 1
 1
 NIL
