@@ -220,7 +220,6 @@ to go
   ; --- Handle Path Recalculations ---
   let turtles-to-recalculate turtles with [needs-path-recalculation? = true]
   if any? turtles-to-recalculate [
-    show (word "Recalculating paths for " count turtles-to-recalculate " agents.")
     ; Observer iterates through each turtle needing recalculation
     foreach sort turtles-to-recalculate [ a-turtle ->
       reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
@@ -229,7 +228,6 @@ to go
         set path-index 0
         if empty? my-path [
           ; If still no path after recalculation, agent might be truly stuck
-          show (word "Agent " who " could not recalculate a path to " my-goal-patch)
         ]
         set needs-path-recalculation? false ; Reset the flag for this turtle
       ]
@@ -296,7 +294,6 @@ to-report find-path-bfs [start-patch goal-patch]
   ] [
     ; No path found (queue became empty)
     ; 'path' remains empty []
-    print (word "Warning: No path found for agent starting near " start-patch " to " goal-patch)
   ]
 
   report path
@@ -319,7 +316,6 @@ to decide-movement
        face my-goal-patch
        ; If path is empty/finished and not at goal, signal for recalculation
        if (empty? my-path or path-index >= length my-path) and patch-here != my-goal-patch [
-         show (word "Agent " who " got stuck and needs path recalculation.")
          set needs-path-recalculation? true
          ; Agent will attempt to move towards goal patch for now, or wait if it can't.
          ; Path will be recalculated by observer at the end of the 'go' tick.
@@ -355,7 +351,6 @@ to decide-movement
     bk 1                        ; Step backward
     rt 45                       ; Turn right by 45 degrees (can be adjusted)
     set needs-path-recalculation? true ; Signal observer to recalculate path
-    show (word "Agent " who " got stuck and needs path recalculation.")
     set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
   ] ifelse is-turtle-ahead? [
     ; Another turtle is directly ahead (but no fixed obstacle)
