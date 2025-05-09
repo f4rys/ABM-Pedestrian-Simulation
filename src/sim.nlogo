@@ -11,6 +11,10 @@ patches-own [
   is-obstacle?              ; Is the cell an obstacle (building, road)? (Boolean)
   is-goal-area?             ; Does the cell belong to the goal area? (Boolean)
   is-spawn-area?            ; Does the cell belong to the agent spawn area? (Boolean)
+
+  ; --- BFS Variables ---
+  visited?                  ; Flag used during BFS pathfinding (Boolean)
+  predecessor               ; Patch from which this patch was reached during BFS (Patch object)
 ]
 
 turtles-own [
@@ -31,6 +35,16 @@ turtles-own [
   time-waiting              ; Counter for time spent waiting
   neighbors-in-radius       ; Set of nearby agents detected within the avoidance radius (agentset)
   is-able-to-move?          ; Can the agent move in this step? (Boolean)
+
+  ; --- Pathfinding ---
+  stuck-timer               ; Counter for how long an agent is stuck (Number)
+  my-path                   ; List of patches representing the calculated path (List)
+  path-index                ; Current index in my-path the agent is heading towards (Number)
+  needs-path-recalculation? ; Flag to signal the observer to recalculate path (Boolean)
+
+  is-at-goal?               ; Is the agent currently hidden at its goal? (Boolean)
+  time-to-reappear          ; Tick at which a hidden agent should reappear (Number)
+  needs-new-path-after-reappearance? ; Flag for observer to set new path after reappearing (Boolean)
 ]
 
 ; --- SETUP PROCEDURES ---
@@ -76,6 +90,7 @@ to setup-environment
   let new-min-pycor (new-max-pycor - map-height + 1)
 
   resize-world new-min-pxcor new-max-pxcor new-min-pycor new-max-pycor
+  __change-topology false false ; Disable world wrapping
   set-patch-size (max (list 3 (200 / max (list map-width map-height))))
 
   ; --- Assign Patch Properties based on Map ---
@@ -151,54 +166,186 @@ to setup-pedestrians
     stop
   ]
 
-  ; Create initial pedestrian agents
-  create-turtles initial-agent-number [
-    set shape "person"
-    set size 2
-    set color blue
+  ; Create initial pedestrian agents one by one to reset BFS vars for each
+  repeat initial-agent-number [
+    reset-bfs-vars ; Observer calls reset before creating the next turtle
 
-    ; --- Assign Unique ID ---
-    set my-id total-agents-created
-    set total-agents-created total-agents-created + 1
+    create-turtles 1 [ ; Create one turtle, commands in turtle context
+      set shape "person"
+      set size 2
+      set color blue
 
-    ; --- Assign Heterogeneous Attributes ("Personality") ---
-    ; Assign random parameters values within specified ranges
-    set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
-    set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
-    set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
-    set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
-    set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
+      ; --- Assign Unique ID ---
+      set my-id total-agents-created
+      set total-agents-created total-agents-created + 1
 
-    ; --- Initial Position and Goal ---
-    ; Place agents randomly in a spawn area
-    move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
-    if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
-       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
-       if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
-          move-to one-of patches with [is-spawn-area? = true]
-       ]
+      ; --- Assign Heterogeneous Attributes ("Personality") ---
+      ; Assign random parameters values within specified ranges
+      set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
+      set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
+      set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
+      set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
+      set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
+
+      ; --- Initial Position and Goal ---
+      ; Place agents randomly in a spawn area
+      move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
+      if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
+         move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
+         if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
+            move-to one-of patches with [is-spawn-area? = true]
+         ]
+      ]
+
+      ; Assign a goal patch in a goal area
+      set my-goal-patch one-of patches with [is-goal-area? = true]
+
+      ; --- Calculate Initial Path ---
+      ; BFS vars were just reset by the observer before this turtle was created
+      set my-path find-path-bfs patch-here my-goal-patch
+      set path-index 0 ; Start aiming for the first patch in the path list
+
+      ; --- Initialize State Variables ---
+      set current-speed 0
+      set current-state "walking"
+      set time-waiting 0
+      set neighbors-in-radius no-turtles
+      set is-able-to-move? true
+      set needs-path-recalculation? false ; Initialize the new flag
+      set stuck-timer 0 ; Initialize stuck timer
+      set is-at-goal? false
+      set time-to-reappear 0
+      set needs-new-path-after-reappearance? false
     ]
-    let current-patch patch-here ; Store the turtle's current patch
-
-    ; Assign a goal patch in a goal area
-    set my-goal-patch one-of patches with [is-goal-area? = true]
-
-    ; --- Initialize State Variables ---
-    set current-speed 0
-    set current-state "walking"
-    set time-waiting 0
-    set neighbors-in-radius no-turtles
-    set is-able-to-move? true
   ]
 end
 
 ; --- GO PROCEDURE (Main Simulation Loop) ---
 to go
-  ask turtles [
-    decide-movement
-    move
+  ask turtles with [not is-at-goal?] [
+      decide-movement
+      move
   ]
+
+  ; --- Handle Agent Reappearance ---
+  ask turtles with [is-at-goal? and ticks >= time-to-reappear] [
+    set is-at-goal? false
+    st ; Show turtle
+    ; Agent reappears at its current location (the goal patch where it was hidden)
+
+    ; Assign a new goal patch, ensuring it's different from the current one (patch-here)
+    let new-goal nobody
+    while [new-goal = nobody or new-goal = patch-here] [
+      set new-goal one-of patches with [is-goal-area? = true]
+    ]
+    set my-goal-patch new-goal
+
+    ; Signal observer to set new path
+    set needs-new-path-after-reappearance? true
+
+    set is-able-to-move? true ; Allow movement decisions once path is set
+    set path-index 0
+    set stuck-timer 0
+    ; my-path will be set by the observer
+  ]
+
+  ; --- Handle Path Recalculations for existing agents ---
+  let turtles-to-recalculate turtles with [needs-path-recalculation? = true and not is-at-goal?]
+  if any? turtles-to-recalculate [
+    ; Observer iterates through each turtle needing recalculation
+    foreach sort turtles-to-recalculate [ a-turtle ->
+      reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
+      ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
+        set my-path find-path-bfs patch-here my-goal-patch
+        set path-index 0
+        if empty? my-path [
+          ; If still no path after recalculation, agent might be truly stuck
+        ]
+        set needs-path-recalculation? false ; Reset the flag for this turtle
+      ]
+    ]
+  ]
+
+  ; --- Handle Path Recalculations for reappearing agents ---
+  let turtles-needing-new-path-after-reappearance turtles with [needs-new-path-after-reappearance? = true and not is-at-goal?]
+  if any? turtles-needing-new-path-after-reappearance [
+    foreach sort turtles-needing-new-path-after-reappearance [ a-turtle ->
+      reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
+      ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
+        set my-path find-path-bfs patch-here my-goal-patch
+        set path-index 0
+        if empty? my-path [
+          ; If no path after reappearance, agent might be truly stuck or map has issues
+          ; Consider a failsafe, e.g., pick another goal or wait.
+        ]
+        set needs-new-path-after-reappearance? false ; Reset the flag for this turtle
+      ]
+    ]
+  ]
+
   tick
+end
+
+; --- PATHFINDING PROCEDURES (BFS) ---
+
+; Resets patch variables used by BFS
+to reset-bfs-vars
+  ask patches [
+    set visited? false
+    set predecessor nobody
+  ]
+end
+
+; Finds a path between start-patch and goal-patch using Breadth-First Search
+; Returns a list of patches (path) or an empty list if no path exists.
+to-report find-path-bfs [start-patch goal-patch]
+  ; BFS variables (visited?, predecessor) are reset by the observer before this is called.
+
+  ; 2. Initialize Queue and Starting Patch
+  let queue []          ; Use a list as a queue (enqueue = lput, dequeue = first + but-first)
+  set queue lput start-patch queue
+  ask start-patch [ set visited? true ]
+
+  ; 3. BFS Loop
+  let path-found? false
+  while [not empty? queue and not path-found?] [
+    ; Dequeue the next patch to visit
+    let current-patch first queue
+    set queue but-first queue
+
+    ; Check if it's the goal
+    ifelse current-patch = goal-patch [
+      set path-found? true
+    ] [
+      ; Explore neighbors
+      ask current-patch [
+        ; Consider neighbors that are walkable and not yet visited
+        let valid-neighbors neighbors with [ is-walkable? and not visited? ]
+        ask valid-neighbors [
+          set visited? true
+          set predecessor current-patch ; Record where we came from
+          set queue lput self queue     ; Enqueue the neighbor
+        ]
+      ]
+    ]
+  ]
+
+  ; 4. Reconstruct Path (if found)
+  let path []
+  ifelse path-found? [
+    let current-node goal-patch
+    while [current-node != nobody] [
+      set path fput current-node path ; Add patch to the front of the list
+      set current-node [predecessor] of current-node
+    ]
+    ; Optional: Remove the starting patch itself if agents start on it
+    ; if (count path > 1) [ set path but-first path ]
+  ] [
+    ; No path found (queue became empty)
+    ; 'path' remains empty []
+  ]
+
+  report path
 end
 
 ; --- AGENT BEHAVIOR PROCEDURES ---
@@ -206,30 +353,59 @@ to decide-movement
   set is-able-to-move? true ; Assume movement is possible initially
   let original-heading heading ; Store the original heading
 
-  ; 1. Determine Base Heading - Face the goal
-  if my-goal-patch != nobody [
-    face my-goal-patch
+  ; 1. Determine Base Heading - Face the NEXT patch in the path
+  ifelse not empty? my-path and path-index < length my-path [ ; Changed count to length
+    let next-patch item path-index my-path
+    if patch-here != next-patch [ ; Avoid facing self if already on the target patch
+       face next-patch
+    ]
+  ] [
+    ; No path, or path completed - default to facing goal or stopping
+    if my-goal-patch != nobody [
+       face my-goal-patch
+       ; If path is empty/finished and not at goal, signal for recalculation
+       if (empty? my-path or path-index >= length my-path) and patch-here != my-goal-patch [
+         set needs-path-recalculation? true
+         ; Agent will attempt to move towards goal patch for now, or wait if it can't.
+         ; Path will be recalculated by observer at the end of the 'go' tick.
+       ]
+    ]
+    ; Consider stopping the agent if path is done but not at goal?
+    ; set is-able-to-move? false ; This might be handled by recalculation failure
   ]
 
   ; --- Perception Check (based on potentially new heading) ---
   let current-next-patch patch-at-heading-and-distance 1 0
-  let obstacle-directly-ahead? false
-  let turtles-directly-ahead? false
+  let is-fixed-obstacle-ahead? false ; True if unpassable terrain/obstacle or edge of world
+  let is-turtle-ahead? false         ; True if another turtle is in the immediate next patch
 
   ifelse current-next-patch = nobody [ ; Edge of the world
-    set obstacle-directly-ahead? true
+    set is-fixed-obstacle-ahead? true
   ] [
     ; Check if the next patch is an obstacle OR not walkable
-    set obstacle-directly-ahead? ([is-obstacle?] of current-next-patch or not [is-walkable?] of current-next-patch)
-    if not obstacle-directly-ahead? [
-       set turtles-directly-ahead? any? other turtles-on current-next-patch
+    set is-fixed-obstacle-ahead? ([is-obstacle?] of current-next-patch or not [is-walkable?] of current-next-patch)
+    if not is-fixed-obstacle-ahead? [ ; Only check for turtles if no fixed obstacle
+       set is-turtle-ahead? any? other turtles-on current-next-patch
     ]
   ]
 
   ; --- Decision Logic ---
-  ifelse obstacle-directly-ahead? or turtles-directly-ahead? [
-    ; Obstacle or another turtle is directly ahead, try to avoid
-    set is-able-to-move? false ; Assume waiting unless a clear path is found
+  set current-state "walking" ; Ensure agent is always in "walking" state, never "waiting"
+  set time-waiting 0          ; Reset time-waiting as "waiting" state is removed
+
+  if is-fixed-obstacle-ahead? [
+    ; Fixed obstacle (building, road, edge of world) is directly ahead
+    set is-able-to-move? false  ; Cannot move FORWARD this tick
+    set current-speed 0
+    bk 1 ; Move back one step to avoid the obstacle
+    rt (random-float 120) + 30  ; Turn significantly (30 to 150 degrees)
+    set needs-path-recalculation? true ; Signal observer to recalculate path
+    set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
+    set stuck-timer stuck-timer + 1
+  ] ifelse is-turtle-ahead? [
+    ; Another turtle is directly ahead (but no fixed obstacle)
+    ; Attempt to avoid the other turtle using side-stepping or random turns
+    set is-able-to-move? false ; Assume can't move unless a clear path is found by avoidance
     let avoidance-angle 30 ; Angle to try turning (degrees)
 
     ; Try turning right
@@ -240,7 +416,7 @@ to decide-movement
        set clear-right? true
     ]
 
-      ifelse clear-right? [
+    ifelse clear-right? [
       ; Found clear path to the right
       set is-able-to-move? true
       ; Keep the new heading (already turned right)
@@ -258,23 +434,33 @@ to decide-movement
          set is-able-to-move? true
          ; Keep the new heading (already turned left)
       ] [
-         ; Both sides blocked, restore original heading and wait
-         rt avoidance-angle ; Turn back to original heading
-         set is-able-to-move? false
+         ; Both sides blocked, restore original heading from left attempt and try random move
+         rt avoidance-angle ; Turn back to original heading (relative to facing left)
+
+         ; --- Attempt a random adjustment ---
+         let random-turn ((random 37) - 18) * 5 ; Try turning in 5-degree increments up to +/- 90 deg
+         rt random-turn
+         let patch-after-random-turn patch-at-heading-and-distance 1 0
+         ifelse patch-after-random-turn != nobody and [is-walkable?] of patch-after-random-turn and not any? turtles-on patch-after-random-turn [
+           set is-able-to-move? true
+           ; Heading is already set by rt random-turn
+         ] [
+           ; Random turn didn't find a clear spot, revert the random turn
+           lt random-turn
+           set is-able-to-move? false ; Still can't move this way
+         ]
       ]
     ]
 
-    ; If still unable to move after trying avoidance
+    ; After all avoidance attempts for turtles (L/R/Random):
     ifelse not is-able-to-move? [
-       set heading original-heading ; Face original direction if waiting
-       set current-state "waiting"
-       set time-waiting time-waiting + 1
-       set current-speed 0
-       set neighbors-in-radius no-turtles ; No movement, perception less critical here
-    ] [
-       ; If we found a way (left or right), set state and speed
-       set current-state "walking" ; Or keep as "walking"
-       set time-waiting 0
+       set heading original-heading ; Face original intended direction if all avoidance failed
+       set current-speed 0          ; Cannot move this tick
+       set neighbors-in-radius no-turtles
+       set stuck-timer stuck-timer + 1 ; Increment stuck timer if unable to move due to another turtle
+    ]  [
+       ; A clear path was found after turtle avoidance
+       ; is-able-to-move? is true, current-state and time-waiting are already set
        ; --- Recalculate neighbors based on NEW heading ---
        let nearby-turtles (turtles in-radius avoidance-radius)
        set neighbors-in-radius other nearby-turtles
@@ -287,14 +473,11 @@ to decide-movement
        let speed-factor max (list 0 (1 - density-factor))
        set current-speed min (list desired-speed 1.0) * speed-factor
        set current-speed max (list 0 current-speed)
-       ; Ensure is-able-to-move is true if we got here
-       set is-able-to-move? true
+       set stuck-timer 0 ; Reset stuck timer if able to move
     ]
-
-      ] [
-    ; Path directly ahead is clear
-    set current-state "walking"
-    set time-waiting 0
+  ] [
+    ; Path directly ahead is clear (no fixed obstacle, no turtle)
+    ; is-able-to-move? is true from procedure start, current-state and time-waiting are set.
     ; --- Recalculate neighbors based on CURRENT heading (towards goal) ---
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
@@ -307,24 +490,65 @@ to decide-movement
     let speed-factor max (list 0 (1 - density-factor))
     set current-speed min (list desired-speed 1.0) * speed-factor
     set current-speed max (list 0 current-speed)
-    set is-able-to-move? true ; Ensure this is set if path is clear
+    set stuck-timer 0 ; Reset stuck timer if able to move
+  ]
+
+  ; --- Check if agent is stuck for too long ---
+  if stuck-timer > patience [ ; If stuck for more than patience level
+    ; Try a more drastic evasive maneuver
+    rt (random-float 180) - 90 ; Turn a random angle between -90 and 90 degrees
+    let temp-patch-ahead patch-at-heading-and-distance 1 0
+    if temp-patch-ahead != nobody and [is-walkable?] of temp-patch-ahead [
+      fd 1 ; Try to move one step only if safe
+    ]
+    set needs-path-recalculation? true ; Recalculate path after this desperation move
+    set stuck-timer 0 ; Reset stuck timer after attempting to unstick
   ]
 end
 
 to move
   ; Agent executes the movement if possible
-  if is-able-to-move? [
-    ; wiggle always active when moving
-    rt random-float (wiggle-angle / 2)
-    lt random-float (wiggle-angle / 2)
-    ; Basic forward movement
-    fd current-speed
+  if is-able-to-move? and current-speed > 0 [
+    ; Check the patch at the intended destination
+    let destination-patch patch-at-heading-and-distance current-speed 0
+    ; Also check the patch immediately in front if speed > 1 to prevent jumping over walls
+    let immediate-next-patch patch-at-heading-and-distance 1 0
+
+    ifelse destination-patch != nobody and [is-walkable?] of destination-patch and
+       (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
+    [
+      ; It's safe to move
+      ; wiggle always active when moving
+      ;rt random-float (wiggle-angle / 2)
+      ;lt random-float (wiggle-angle / 2)
+      ; Basic forward movement
+      fd current-speed
+
+      ; --- Update Path Index ---
+      ; If we have a path and have reached (or are very close to) the center of the target patch
+      if not empty? my-path and path-index < length my-path [ ; Changed count to length
+         let target-patch item path-index my-path
+         if patch-here = target-patch [
+            set path-index path-index + 1 ; Move to the next point in the path
+         ]
+      ]
+    ]  [
+      ; Intended move is into an obstacle or off the world
+      set current-speed 0 ; Stop
+      set needs-path-recalculation? true ; Good idea to recalculate if planned move failed
+      set stuck-timer stuck-timer + 1 ; Count this as being stuck
+    ]
   ]
 
-  ; Check if goal is reached
+  ; Check if goal is reached (using the final goal patch)
   if patch-here = my-goal-patch [
      set total-agents-reached-goal total-agents-reached-goal + 1
-     die ; Agent reached goal #TODO: Consider setting another goal
+     set is-at-goal? true
+     set time-to-reappear ticks + 50 + random 151  ; Wait 50 to 200 ticks
+     ht ; Hide turtle
+     set current-speed 0
+     set is-able-to-move? false ; Prevent movement/decisions while hidden
+     stop ; Stop further actions for this agent this tick
   ]
 end
 @#$#@#$#@
@@ -342,15 +566,15 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
-1
+0
+0
 1
 -150
 149
 -89
 90
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -398,7 +622,7 @@ initial-agent-number
 initial-agent-number
 1
 1000
-1000.0
+52.0
 1
 1
 NIL
@@ -441,9 +665,9 @@ SLIDER
 278
 min-patience
 min-patience
-50
-150
-60.0
+1
+10
+5.0
 1
 1
 NIL
@@ -456,9 +680,9 @@ SLIDER
 279
 max-patience
 max-patience
-50
-150
-70.0
+1
+10
+7.0
 1
 1
 NIL
