@@ -160,21 +160,15 @@ to setup-pedestrians
       ; --- Assign Heterogeneous Attributes ("Personality") ---
       ; Assign random parameters values within specified ranges
       set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
-      set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
-      set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
+      set patience (min-patience + random (max-patience - min-patience))
+      set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity))
       set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
-      set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
+      set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle))
 
       ; --- Initial Position and Goal ---
       ; Place agents randomly in a spawn area
       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
-      if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
-         move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
-         if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
-            move-to one-of patches with [is-spawn-area? = true]
-         ]
-      ]
-
+  
       ; Assign a goal patch in a goal area
       set my-goal-patch one-of patches with [is-goal-area? = true]
 
