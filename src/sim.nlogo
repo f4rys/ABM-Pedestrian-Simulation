@@ -49,7 +49,7 @@ to setup
   clear-all
   set total-agents-created 0
   set total-agents-reached-goal 0
-  set move-countdown-static 100000
+  set move-countdown-static 0
   setup-environment
   setup-pedestrians
   reset-ticks
@@ -163,51 +163,54 @@ to setup-pedestrians
     stop
   ]
 
-  ; Create initial pedestrian agents
-  create-turtles initial-agent-number [
+  ; Create initial pedestrian agents one by one to reset BFS vars for each
+  repeat initial-agent-number [
+    reset-bfs-vars ; Observer calls reset before creating the next turtle
 
-    set shape "person"
-    set size 2
-    set color blue
+    create-turtles 1 [ ; Create one turtle, commands in turtle context
+      set shape "person"
+      set size 2
+      set color blue
 
-    ; --- Assign Unique ID ---
-    set my-id total-agents-created
-    set total-agents-created total-agents-created + 1
+      ; --- Assign Unique ID ---
+      set my-id total-agents-created
+      set total-agents-created total-agents-created + 1
 
-    ; --- Assign Heterogeneous Attributes ("Personality") ---
-    ; Assign random parameters values within specified ranges
-    set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
-    set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
-    set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
-    set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
-    set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
+      ; --- Assign Heterogeneous Attributes ("Personality") ---
+      ; Assign random parameters values within specified ranges
+      set desired-speed (min-desired-speed + random-float (max-desired-speed - min-desired-speed))
+      set patience (min-patience + random (max-patience - min-patience)) ; Use random for integer range
+      set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity)) ; Factor for slowing down in crowds
+      set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
+      set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle)) ; Use random for integer range
 
-    ; --- Initial Position and Goal ---
-    ; Place agents randomly in a spawn area
-    move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
-    if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
-       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
-       if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
-          move-to one-of patches with [is-spawn-area? = true]
-       ]
+      ; --- Initial Position and Goal ---
+      ; Place agents randomly in a spawn area
+      move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
+      if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
+         move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
+         if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
+            move-to one-of patches with [is-spawn-area? = true]
+         ]
+      ]
+
+      ; Assign a goal patch in a goal area
+      set my-goal-patch one-of patches with [is-goal-area? = true]
+
+      ; --- Calculate Initial Path ---
+      ; BFS vars were just reset by the observer before this turtle was created
+      set my-path find-path-bfs patch-here my-goal-patch
+      set path-index 0 ; Start aiming for the first patch in the path list
+
+      ; --- Initialize State Variables ---
+      set current-speed 0
+      set current-state "walking"
+      set time-waiting 0
+      set neighbors-in-radius no-turtles
+      set is-able-to-move? true
+      set needs-path-recalculation? false ; Initialize the new flag
+      set move-countdown move-countdown-static ; Initialize countdown for staggered start
     ]
-    let current-patch patch-here ; Store the turtle's current patch
-
-    ; Assign a goal patch in a goal area
-    set my-goal-patch one-of patches with [is-goal-area? = true]
-
-    ; --- Calculate Initial Path ---
-    set my-path find-path-bfs patch-here my-goal-patch
-    set path-index 0 ; Start aiming for the first patch in the path list
-
-    ; --- Initialize State Variables ---
-    set current-speed 0
-    set current-state "walking"
-    set time-waiting 0
-    set neighbors-in-radius no-turtles
-    set is-able-to-move? true
-    set needs-path-recalculation? false ; Initialize the new flag
-    set move-countdown move-countdown-static ; Initialize countdown for staggered start
   ]
 end
 
@@ -223,23 +226,21 @@ to go
   ]
 
   ; --- Handle Path Recalculations ---
-  ; Check if any turtle signaled that it needs its path recalculated
-  if any? turtles with [needs-path-recalculation? = true] [
-    show (word "Recalculating paths for agents that need it.")
-    reset-bfs-vars ; Observer resets BFS variables once if any recalculation is needed
-    show (word "BFS variables reset.")
-    ask turtles with [needs-path-recalculation? = true] [
-      show (word "Agent " who " recalculating path to " my-goal-patch)
-      set my-path find-path-bfs patch-here my-goal-patch
-      show (word "Agent " who " recalculated path to " my-goal-patch)
-      set path-index 0
-      if empty? my-path [
-        ; If still no path after recalculation, agent might be truly stuck
-        ; For now, it will just stop moving based on is-able-to-move? logic
-        ; or try to face goal again in the next tick.
-        show (word "Agent " who " could not recalculate a path to " my-goal-patch)
+  let turtles-to-recalculate turtles with [needs-path-recalculation? = true]
+  if any? turtles-to-recalculate [
+    show (word "Recalculating paths for " count turtles-to-recalculate " agents.")
+    ; Observer iterates through each turtle needing recalculation
+    foreach sort turtles-to-recalculate [ a-turtle ->
+      reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
+      ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
+        set my-path find-path-bfs patch-here my-goal-patch
+        set path-index 0
+        if empty? my-path [
+          ; If still no path after recalculation, agent might be truly stuck
+          show (word "Agent " who " could not recalculate a path to " my-goal-patch)
+        ]
+        set needs-path-recalculation? false ; Reset the flag for this turtle
       ]
-      set needs-path-recalculation? false ; Reset the flag
     ]
   ]
 
@@ -259,7 +260,7 @@ end
 ; Finds a path between start-patch and goal-patch using Breadth-First Search
 ; Returns a list of patches (path) or an empty list if no path exists.
 to-report find-path-bfs [start-patch goal-patch]
-  ; 1. Reset BFS variables for all patches
+  ; BFS variables (visited?, predecessor) are reset by the observer before this is called.
 
   ; 2. Initialize Queue and Starting Patch
   let queue []          ; Use a list as a queue (enqueue = lput, dequeue = first + but-first)
@@ -500,8 +501,8 @@ GRAPHICS-WINDOW
 149
 -89
 90
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -549,7 +550,7 @@ initial-agent-number
 initial-agent-number
 1
 1000
-1.0
+52.0
 1
 1
 NIL
