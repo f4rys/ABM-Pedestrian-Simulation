@@ -231,14 +231,9 @@ to go
   ask turtles with [is-at-goal? and ticks >= time-to-reappear] [
     set is-at-goal? false
     st ; Show turtle
-    move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Move to a spawn area
-    if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
-       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
-       if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
-          move-to one-of patches with [is-spawn-area? = true]
-       ]
-    ]
-    ; Assign a new goal patch, ensuring it's different from the current one
+    ; Agent reappears at its current location (the goal patch where it was hidden)
+
+    ; Assign a new goal patch, ensuring it's different from the current one (patch-here)
     let new-goal nobody
     while [new-goal = nobody or new-goal = patch-here] [
       set new-goal one-of patches with [is-goal-area? = true]
@@ -519,7 +514,7 @@ to move
     ; Also check the patch immediately in front if speed > 1 to prevent jumping over walls
     let immediate-next-patch patch-at-heading-and-distance 1 0
 
-    if destination-patch != nobody and [is-walkable?] of destination-patch and
+    ifelse destination-patch != nobody and [is-walkable?] of destination-patch and
        (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
     [
       ; It's safe to move
@@ -537,7 +532,7 @@ to move
             set path-index path-index + 1 ; Move to the next point in the path
          ]
       ]
-    ] else [
+    ]  [
       ; Intended move is into an obstacle or off the world
       set current-speed 0 ; Stop
       set needs-path-recalculation? true ; Good idea to recalculate if planned move failed
