@@ -218,9 +218,13 @@ to go
   ; --- Handle Path Recalculations ---
   ; Check if any turtle signaled that it needs its path recalculated
   if any? turtles with [needs-path-recalculation? = true] [
+    show (word "Recalculating paths for agents that need it.")
     reset-bfs-vars ; Observer resets BFS variables once if any recalculation is needed
+    show (word "BFS variables reset.")
     ask turtles with [needs-path-recalculation? = true] [
+      show (word "Agent " who " recalculating path to " my-goal-patch)
       set my-path find-path-bfs patch-here my-goal-patch
+      show (word "Agent " who " recalculated path to " my-goal-patch)
       set path-index 0
       if empty? my-path [
         ; If still no path after recalculation, agent might be truly stuck
@@ -239,6 +243,7 @@ end
 
 ; Resets patch variables used by BFS
 to reset-bfs-vars
+  show (word "Inside reset-bfs-vars")
   ask patches [
     set visited? false
     set predecessor nobody
@@ -315,6 +320,7 @@ to decide-movement
        face my-goal-patch
        ; If path is empty/finished and not at goal, signal for recalculation
        if (empty? my-path or path-index >= length my-path) and patch-here != my-goal-patch [
+         show (word "Agent " who " got stuck and needs path recalculation.")
          set needs-path-recalculation? true
          ; Agent will attempt to move towards goal patch for now, or wait if it can't.
          ; Path will be recalculated by observer at the end of the 'go' tick.
@@ -324,25 +330,37 @@ to decide-movement
     ; set is-able-to-move? false ; This might be handled by recalculation failure
   ]
 
-
   ; --- Perception Check (based on potentially new heading) ---
   let current-next-patch patch-at-heading-and-distance 1 0
-  let obstacle-directly-ahead? false
-  let turtles-directly-ahead? false
+  let is-fixed-obstacle-ahead? false ; True if unpassable terrain/obstacle or edge of world
+  let is-turtle-ahead? false         ; True if another turtle is in the immediate next patch
 
   ifelse current-next-patch = nobody [ ; Edge of the world
-    set obstacle-directly-ahead? true
+    set is-fixed-obstacle-ahead? true
   ] [
     ; Check if the next patch is an obstacle OR not walkable
-    set obstacle-directly-ahead? ([is-obstacle?] of current-next-patch or not [is-walkable?] of current-next-patch)
-    if not obstacle-directly-ahead? [
-       set turtles-directly-ahead? any? other turtles-on current-next-patch
+    set is-fixed-obstacle-ahead? ([is-obstacle?] of current-next-patch or not [is-walkable?] of current-next-patch)
+    if not is-fixed-obstacle-ahead? [ ; Only check for turtles if no fixed obstacle
+       set is-turtle-ahead? any? other turtles-on current-next-patch
     ]
   ]
 
   ; --- Decision Logic ---
-  ifelse obstacle-directly-ahead? or turtles-directly-ahead? [
-    ; Obstacle or another turtle is directly ahead, try to avoid
+  set current-state "walking" ; Ensure agent is always in "walking" state, never "waiting"
+  set time-waiting 0          ; Reset time-waiting as "waiting" state is removed
+
+  if is-fixed-obstacle-ahead? [
+    ; Fixed obstacle (building, road, edge of world) is directly ahead
+    set is-able-to-move? false  ; Cannot move FORWARD this tick
+    set current-speed 0
+    bk 1                        ; Step backward
+    rt 45                       ; Turn right by 45 degrees (can be adjusted)
+    set needs-path-recalculation? true ; Signal observer to recalculate path
+    show (word "Agent " who " got stuck and needs path recalculation.")
+    set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
+  ] ifelse is-turtle-ahead? [
+    ; Another turtle is directly ahead (but no fixed obstacle)
+    ; Attempt to avoid the other turtle using side-stepping or random turns
     set is-able-to-move? false ; Assume can't move unless a clear path is found by avoidance
     let avoidance-angle 30 ; Angle to try turning (degrees)
 
@@ -390,17 +408,14 @@ to decide-movement
       ]
     ]
 
-    ; After all avoidance attempts (L/R/Random):
+    ; After all avoidance attempts for turtles (L/R/Random):
     ifelse not is-able-to-move? [
        set heading original-heading ; Face original intended direction if all avoidance failed
-       set current-state "walking"  ; Stay in "walking" state
-       set time-waiting 0           ; Reset time-waiting as "waiting" state is removed
        set current-speed 0          ; Cannot move this tick
        set neighbors-in-radius no-turtles
-    ] [
-       ; A clear path was found (either initially, or after L/R/Random avoidance)
-       set current-state "walking"
-       set time-waiting 0
+    ]  [
+       ; A clear path was found after turtle avoidance
+       ; is-able-to-move? is true, current-state and time-waiting are already set
        ; --- Recalculate neighbors based on NEW heading ---
        let nearby-turtles (turtles in-radius avoidance-radius)
        set neighbors-in-radius other nearby-turtles
@@ -413,12 +428,10 @@ to decide-movement
        let speed-factor max (list 0 (1 - density-factor))
        set current-speed min (list desired-speed 1.0) * speed-factor
        set current-speed max (list 0 current-speed)
-       ; is-able-to-move? is already true here
     ]
   ] [
-    ; Path directly ahead is clear (no initial obstacle or turtle)
-    set current-state "walking"
-    set time-waiting 0
+    ; Path directly ahead is clear (no fixed obstacle, no turtle)
+    ; is-able-to-move? is true from procedure start, current-state and time-waiting are set.
     ; --- Recalculate neighbors based on CURRENT heading (towards goal) ---
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
@@ -431,7 +444,6 @@ to decide-movement
     let speed-factor max (list 0 (1 - density-factor))
     set current-speed min (list desired-speed 1.0) * speed-factor
     set current-speed max (list 0 current-speed)
-    set is-able-to-move? true ; Ensure this is set if path is clear
   ]
 end
 
@@ -439,8 +451,8 @@ to move
   ; Agent executes the movement if possible
   if is-able-to-move? [
     ; wiggle always active when moving
-    rt random-float (wiggle-angle / 2)
-    lt random-float (wiggle-angle / 2)
+    ;rt random-float (wiggle-angle / 2)
+    ;lt random-float (wiggle-angle / 2)
     ; Basic forward movement
     fd current-speed
 
@@ -531,7 +543,7 @@ initial-agent-number
 initial-agent-number
 1
 1000
-210.0
+1.0
 1
 1
 NIL
