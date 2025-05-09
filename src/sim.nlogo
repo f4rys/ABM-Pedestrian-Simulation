@@ -47,7 +47,6 @@ turtles-own [
 
   is-at-goal?               ; Is the agent currently hidden at its goal? (Boolean)
   time-to-reappear          ; Tick at which a hidden agent should reappear (Number)
-  needs-new-path-after-reappearance? ; Flag for observer to set new path after reappearing (Boolean)
 ]
 
 ; --- SETUP PROCEDURES ---
@@ -168,7 +167,7 @@ to setup-pedestrians
       ; --- Initial Position and Goal ---
       ; Place agents randomly in a spawn area
       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
-  
+
       ; Assign a goal patch in a goal area
       set my-goal-patch one-of patches with [is-goal-area? = true]
 
@@ -187,7 +186,6 @@ to setup-pedestrians
       set stuck-timer 0 ; Initialize stuck timer
       set is-at-goal? false
       set time-to-reappear 0
-      set needs-new-path-after-reappearance? false
     ]
   ]
 end
@@ -203,7 +201,6 @@ to go
   ask turtles with [is-at-goal? and ticks >= time-to-reappear] [
     set is-at-goal? false
     st ; Show turtle
-    ; Agent reappears at its current location (the goal patch where it was hidden)
 
     ; Assign a new goal patch, ensuring it's different from the current one (patch-here)
     let new-goal nobody
@@ -212,13 +209,10 @@ to go
     ]
     set my-goal-patch new-goal
 
-    ; Signal observer to set new path
-    set needs-new-path-after-reappearance? true
-
+    set needs-path-recalculation? true ; Signal for path recalculation
     set is-able-to-move? true ; Allow movement decisions once path is set
     set path-index 0
     set stuck-timer 0
-    ; my-path will be set by the observer
   ]
 
   ; --- Handle Path Recalculations for existing agents ---
@@ -230,27 +224,7 @@ to go
       ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
         set my-path find-path-bfs patch-here my-goal-patch
         set path-index 0
-        if empty? my-path [
-          ; If still no path after recalculation, agent might be truly stuck
-        ]
         set needs-path-recalculation? false ; Reset the flag for this turtle
-      ]
-    ]
-  ]
-
-  ; --- Handle Path Recalculations for reappearing agents ---
-  let turtles-needing-new-path-after-reappearance turtles with [needs-new-path-after-reappearance? = true and not is-at-goal?]
-  if any? turtles-needing-new-path-after-reappearance [
-    foreach sort turtles-needing-new-path-after-reappearance [ a-turtle ->
-      reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
-      ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
-        set my-path find-path-bfs patch-here my-goal-patch
-        set path-index 0
-        if empty? my-path [
-          ; If no path after reappearance, agent might be truly stuck or map has issues
-          ; Consider a failsafe, e.g., pick another goal or wait.
-        ]
-        set needs-new-path-after-reappearance? false ; Reset the flag for this turtle
       ]
     ]
   ]
