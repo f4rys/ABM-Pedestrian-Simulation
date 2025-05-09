@@ -1,8 +1,11 @@
 ; This is a NetLogo model for simulating pedestrian behavior in an urban environment.
 
+; Map height: 180
+; Map width: 300
+; Map file: map.txt
+
 globals [
   total-agents-created      ; Counter for all created agents
-  total-agents-reached-goal ; Counter for agents who reached the goal
 ]
 
 patches-own [
@@ -51,7 +54,6 @@ turtles-own [
 to setup
   clear-all
   set total-agents-created 0
-  set total-agents-reached-goal 0
   setup-environment
   setup-pedestrians
   reset-ticks
@@ -78,80 +80,56 @@ to setup-environment
     stop
   ]
 
-  ; --- Determine World Dimensions ---
-  let map-height 180
-  let map-width 300
-
-  ; --- Resize World ---
-  ; Calculate coordinates assuming (0,0) is center
-  let new-min-pxcor (- floor (map-width / 2))
-  let new-max-pxcor (new-min-pxcor + map-width - 1)
-  let new-max-pycor (floor (map-height / 2))
-  let new-min-pycor (new-max-pycor - map-height + 1)
-
-  resize-world new-min-pxcor new-max-pxcor new-min-pycor new-max-pycor
-  __change-topology false false ; Disable world wrapping
-  set-patch-size (max (list 3 (200 / max (list map-width map-height))))
-
   ; --- Assign Patch Properties based on Map ---
   ask patches [
     ; Calculate corresponding row and column in the map file
-    let map-col (pxcor - new-min-pxcor)
-    let map-row (new-max-pycor - pycor)
+    ; Assuming (0,0) is center, map dimensions are 300x180
+    let map-char item (pxcor - (-150)) (item (90 - pycor) map-lines)
 
-    ; Check bounds just in case
-    ifelse map-row >= 0 and map-row < map-height and map-col >= 0 and map-col < map-width [
-      let map-char item map-col (item map-row map-lines)
-
-      ; Set properties based on character
-      (ifelse map-char = "D" [ ; Door (Goal)
-        set pcolor red
-        set is-walkable? true
-        set is-obstacle? false
-        set is-goal-area? true
-        set is-spawn-area? false
-      ]
-      map-char = "S" [ ; Sidewalk (Walkable, Spawn)
-        set pcolor green
-        set is-walkable? true
-        set is-obstacle? false
-        set is-goal-area? false
-        set is-spawn-area? true
-      ]
-      map-char = "C" [ ; Crossing (Walkable)
-        set pcolor white
-        set is-walkable? true
-        set is-obstacle? false
-        set is-goal-area? false
-        set is-spawn-area? false
-      ]
-      map-char = "B" [ ; Building (Obstacle)
-        set pcolor brown
-        set is-walkable? false
-        set is-obstacle? true
-        set is-goal-area? false
-        set is-spawn-area? false
-      ]
-      map-char = "R" [ ; Road (Obstacle)
-        set pcolor gray
-        set is-walkable? false
-        set is-obstacle? true
-        set is-goal-area? false
-        set is-spawn-area? false
-      ]
-      [ ; Default for unknown characters (treat as obstacle)
-        set pcolor black
-        set is-walkable? false
-        set is-obstacle? true
-        set is-goal-area? false
-        set is-spawn-area? false
-        print (word "Warning: Unknown character '" map-char "' at row " map-row ", col " map-col ". Treated as obstacle.")
-      ])
-    ] [
-      ; Should not happen if resize-world worked correctly
-      set pcolor magenta
-      print (word "Error: Patch (" pxcor ", " pycor ") outside calculated map bounds.")
+    ; Set properties based on character
+    (ifelse map-char = "D" [ ; Door (Goal)
+      set pcolor red
+      set is-walkable? true
+      set is-obstacle? false
+      set is-goal-area? true
+      set is-spawn-area? false
     ]
+    map-char = "S" [ ; Sidewalk (Walkable, Spawn)
+      set pcolor green
+      set is-walkable? true
+      set is-obstacle? false
+      set is-goal-area? false
+      set is-spawn-area? true
+    ]
+    map-char = "C" [ ; Crossing (Walkable)
+      set pcolor white
+      set is-walkable? true
+      set is-obstacle? false
+      set is-goal-area? false
+      set is-spawn-area? false
+    ]
+    map-char = "B" [ ; Building (Obstacle)
+      set pcolor brown
+      set is-walkable? false
+      set is-obstacle? true
+      set is-goal-area? false
+      set is-spawn-area? false
+    ]
+    map-char = "R" [ ; Road (Obstacle)
+      set pcolor gray
+      set is-walkable? false
+      set is-obstacle? true
+      set is-goal-area? false
+      set is-spawn-area? false
+    ]
+    [ ; Default for unknown characters (treat as obstacle)
+      set pcolor black
+      set is-walkable? false
+      set is-obstacle? true
+      set is-goal-area? false
+      set is-spawn-area? false
+      print (word "Warning: Unknown character found. Treated as obstacle.")
+    ])
   ]
 end
 
@@ -542,7 +520,6 @@ to move
 
   ; Check if goal is reached (using the final goal patch)
   if patch-here = my-goal-patch [
-     set total-agents-reached-goal total-agents-reached-goal + 1
      set is-at-goal? true
      set time-to-reappear ticks + 50 + random 151  ; Wait 50 to 200 ticks
      ht ; Hide turtle
