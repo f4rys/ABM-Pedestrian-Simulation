@@ -351,8 +351,8 @@ to decide-movement
     ; Fixed obstacle (building, road, edge of world) is directly ahead
     set is-able-to-move? false  ; Cannot move FORWARD this tick
     set current-speed 0
-    bk 1                        ; Step backward
-    rt 45                       ; Turn right by 45 degrees (can be adjusted)
+    bk 1 ; Move back one step to avoid the obstacle
+    rt (random-float 120) + 30  ; Turn significantly (30 to 150 degrees)
     set needs-path-recalculation? true ; Signal observer to recalculate path
     set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
     set stuck-timer stuck-timer + 1
@@ -451,7 +451,10 @@ to decide-movement
   if stuck-timer > patience [ ; If stuck for more than patience level
     ; Try a more drastic evasive maneuver
     rt (random-float 180) - 90 ; Turn a random angle between -90 and 90 degrees
-    fd 1 ; Try to move one step
+    let temp-patch-ahead patch-at-heading-and-distance 1 0
+    if temp-patch-ahead != nobody and [is-walkable?] of temp-patch-ahead [
+      fd 1 ; Try to move one step only if safe
+    ]
     set needs-path-recalculation? true ; Recalculate path after this desperation move
     set stuck-timer 0 ; Reset stuck timer after attempting to unstick
   ]
@@ -459,20 +462,35 @@ end
 
 to move
   ; Agent executes the movement if possible
-  if is-able-to-move? [
-    ; wiggle always active when moving
-    ;rt random-float (wiggle-angle / 2)
-    ;lt random-float (wiggle-angle / 2)
-    ; Basic forward movement
-    fd current-speed
+  if is-able-to-move? and current-speed > 0 [
+    ; Check the patch at the intended destination
+    let destination-patch patch-at-heading-and-distance current-speed 0
+    ; Also check the patch immediately in front if speed > 1 to prevent jumping over walls
+    let immediate-next-patch patch-at-heading-and-distance 1 0
 
-    ; --- Update Path Index ---
-    ; If we have a path and have reached (or are very close to) the center of the target patch
-    if not empty? my-path and path-index < length my-path [ ; Changed count to length
-       let target-patch item path-index my-path
-       if patch-here = target-patch [
-          set path-index path-index + 1 ; Move to the next point in the path
-       ]
+    ifelse destination-patch != nobody and [is-walkable?] of destination-patch and
+       (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
+    [
+      ; It's safe to move
+      ; wiggle always active when moving
+      ;rt random-float (wiggle-angle / 2)
+      ;lt random-float (wiggle-angle / 2)
+      ; Basic forward movement
+      fd current-speed
+
+      ; --- Update Path Index ---
+      ; If we have a path and have reached (or are very close to) the center of the target patch
+      if not empty? my-path and path-index < length my-path [ ; Changed count to length
+         let target-patch item path-index my-path
+         if patch-here = target-patch [
+            set path-index path-index + 1 ; Move to the next point in the path
+         ]
+      ]
+    ]  [
+      ; Intended move is into an obstacle or off the world
+      set current-speed 0 ; Stop
+      set needs-path-recalculation? true ; Good idea to recalculate if planned move failed
+      set stuck-timer stuck-timer + 1 ; Count this as being stuck
     ]
   ]
 
