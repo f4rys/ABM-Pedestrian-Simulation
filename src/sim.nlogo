@@ -41,6 +41,10 @@ turtles-own [
   my-path                   ; List of patches representing the calculated path (List)
   path-index                ; Current index in my-path the agent is heading towards (Number)
   needs-path-recalculation? ; Flag to signal the observer to recalculate path (Boolean)
+
+  is-at-goal?               ; Is the agent currently hidden at its goal? (Boolean)
+  time-to-reappear          ; Tick at which a hidden agent should reappear (Number)
+  needs-new-path-after-reappearance? ; Flag for observer to set new path after reappearing (Boolean)
 ]
 
 ; --- SETUP PROCEDURES ---
@@ -209,19 +213,49 @@ to setup-pedestrians
       set is-able-to-move? true
       set needs-path-recalculation? false ; Initialize the new flag
       set stuck-timer 0 ; Initialize stuck timer
+      set is-at-goal? false
+      set time-to-reappear 0
+      set needs-new-path-after-reappearance? false
     ]
   ]
 end
 
 ; --- GO PROCEDURE (Main Simulation Loop) ---
 to go
-  ask turtles [
+  ask turtles with [not is-at-goal?] [
       decide-movement
       move
   ]
 
-  ; --- Handle Path Recalculations ---
-  let turtles-to-recalculate turtles with [needs-path-recalculation? = true]
+  ; --- Handle Agent Reappearance ---
+  ask turtles with [is-at-goal? and ticks >= time-to-reappear] [
+    set is-at-goal? false
+    st ; Show turtle
+    move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Move to a spawn area
+    if [any? turtles-here] of patch-here [ ; If still stacked, find another nearby spawn patch
+       move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] in-radius 3
+       if [any? turtles-here] of patch-here [ ; Failsafe if still stacked
+          move-to one-of patches with [is-spawn-area? = true]
+       ]
+    ]
+    ; Assign a new goal patch, ensuring it's different from the current one
+    let new-goal nobody
+    while [new-goal = nobody or new-goal = patch-here] [
+      set new-goal one-of patches with [is-goal-area? = true]
+    ]
+    set my-goal-patch new-goal
+
+    ; Signal observer to set new path
+    set needs-new-path-after-reappearance? true
+
+    set is-able-to-move? true ; Allow movement decisions once path is set
+    set path-index 0
+    set stuck-timer 0
+    ; my-path will be set by the observer
+  ]
+
+  ; --- Handle Path Recalculations for existing agents ---
+  let turtles-to-recalculate turtles with [needs-path-recalculation? = true and not is-at-goal?]
   if any? turtles-to-recalculate [
     ; Observer iterates through each turtle needing recalculation
     foreach sort turtles-to-recalculate [ a-turtle ->
@@ -233,6 +267,23 @@ to go
           ; If still no path after recalculation, agent might be truly stuck
         ]
         set needs-path-recalculation? false ; Reset the flag for this turtle
+      ]
+    ]
+  ]
+
+  ; --- Handle Path Recalculations for reappearing agents ---
+  let turtles-needing-new-path-after-reappearance turtles with [needs-new-path-after-reappearance? = true and not is-at-goal?]
+  if any? turtles-needing-new-path-after-reappearance [
+    foreach sort turtles-needing-new-path-after-reappearance [ a-turtle ->
+      reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
+      ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
+        set my-path find-path-bfs patch-here my-goal-patch
+        set path-index 0
+        if empty? my-path [
+          ; If no path after reappearance, agent might be truly stuck or map has issues
+          ; Consider a failsafe, e.g., pick another goal or wait.
+        ]
+        set needs-new-path-after-reappearance? false ; Reset the flag for this turtle
       ]
     ]
   ]
@@ -468,7 +519,7 @@ to move
     ; Also check the patch immediately in front if speed > 1 to prevent jumping over walls
     let immediate-next-patch patch-at-heading-and-distance 1 0
 
-    ifelse destination-patch != nobody and [is-walkable?] of destination-patch and
+    if destination-patch != nobody and [is-walkable?] of destination-patch and
        (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
     [
       ; It's safe to move
@@ -486,7 +537,7 @@ to move
             set path-index path-index + 1 ; Move to the next point in the path
          ]
       ]
-    ]  [
+    ] else [
       ; Intended move is into an obstacle or off the world
       set current-speed 0 ; Stop
       set needs-path-recalculation? true ; Good idea to recalculate if planned move failed
@@ -497,7 +548,12 @@ to move
   ; Check if goal is reached (using the final goal patch)
   if patch-here = my-goal-patch [
      set total-agents-reached-goal total-agents-reached-goal + 1
-     die ; Agent reached goal
+     set is-at-goal? true
+     set time-to-reappear ticks + 50 + random 151  ; Wait 50 to 200 ticks
+     ht ; Hide turtle
+     set current-speed 0
+     set is-able-to-move? false ; Prevent movement/decisions while hidden
+     stop ; Stop further actions for this agent this tick
   ]
 end
 @#$#@#$#@
