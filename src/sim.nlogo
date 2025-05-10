@@ -34,8 +34,6 @@ turtles-own [
 
   ; --- Agent State and Perception ---
   current-speed             ; Actual speed of the agent in the last step
-  current-state             ; Agent state ("walking", "waiting", "avoiding") - (String)
-  time-waiting              ; Counter for time spent waiting
   neighbors-in-radius       ; Set of nearby agents detected within the avoidance radius (agentset)
   is-able-to-move?          ; Can the agent move in this step? (Boolean)
 
@@ -178,8 +176,6 @@ to setup-pedestrians
 
       ; --- Initialize State Variables ---
       set current-speed 0
-      set current-state "walking"
-      set time-waiting 0
       set neighbors-in-radius no-turtles
       set is-able-to-move? true
       set needs-path-recalculation? false ; Initialize the new flag
@@ -278,17 +274,12 @@ to-report find-path-bfs [start-patch goal-patch]
 
   ; 4. Reconstruct Path (if found)
   let path []
-  ifelse path-found? [
+  if path-found? [
     let current-node goal-patch
     while [current-node != nobody] [
       set path fput current-node path ; Add patch to the front of the list
       set current-node [predecessor] of current-node
     ]
-    ; Optional: Remove the starting patch itself if agents start on it
-    ; if (count path > 1) [ set path but-first path ]
-  ] [
-    ; No path found (queue became empty)
-    ; 'path' remains empty []
   ]
 
   report path
@@ -336,9 +327,6 @@ to decide-movement
   ]
 
   ; --- Decision Logic ---
-  set current-state "walking" ; Ensure agent is always in "walking" state, never "waiting"
-  set time-waiting 0          ; Reset time-waiting as "waiting" state is removed
-
   if is-fixed-obstacle-ahead? [
     ; Fixed obstacle (building, road, edge of world) is directly ahead
     set is-able-to-move? false  ; Cannot move FORWARD this tick
@@ -406,7 +394,7 @@ to decide-movement
        set stuck-timer stuck-timer + 1 ; Increment stuck timer if unable to move due to another turtle
     ]  [
        ; A clear path was found after turtle avoidance
-       ; is-able-to-move? is true, current-state and time-waiting are already set
+       ; is-able-to-move? is true
        ; --- Recalculate neighbors based on NEW heading ---
        let nearby-turtles (turtles in-radius avoidance-radius)
        set neighbors-in-radius other nearby-turtles
@@ -423,7 +411,7 @@ to decide-movement
     ]
   ] [
     ; Path directly ahead is clear (no fixed obstacle, no turtle)
-    ; is-able-to-move? is true from procedure start, current-state and time-waiting are set.
+    ; is-able-to-move? is true 
     ; --- Recalculate neighbors based on CURRENT heading (towards goal) ---
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
@@ -449,6 +437,7 @@ to decide-movement
     ]
     set needs-path-recalculation? true ; Recalculate path after this desperation move
     set stuck-timer 0 ; Reset stuck timer after attempting to unstick
+    show (word "Stuck for too long! Recalculating path... " my-id)    show (word "Stuck for too long! Recalculating path... " my-id)
   ]
 end
 
@@ -464,9 +453,6 @@ to move
        (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
     [
       ; It's safe to move
-      ; wiggle always active when moving
-      ;rt random-float (wiggle-angle / 2)
-      ;lt random-float (wiggle-angle / 2)
       ; Basic forward movement
       fd current-speed
 
@@ -490,9 +476,9 @@ to move
   if patch-here = my-goal-patch [
      set is-at-goal? true
      set time-to-reappear ticks + 50 + random 151  ; Wait 50 to 200 ticks
-     ht ; Hide turtle
-     set current-speed 0
+     set current-speed 0 ; Stop moving
      set is-able-to-move? false ; Prevent movement/decisions while hidden
+      ht ; Hide turtle
      stop ; Stop further actions for this agent this tick
   ]
 end
