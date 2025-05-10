@@ -290,132 +290,92 @@ to decide-movement
   set is-able-to-move? true ; Assume movement is possible initially
   let original-heading heading ; Store the original heading
 
-  ; 1. Determine Base Heading - Face the NEXT patch in the path
-  ifelse not empty? my-path and path-index < length my-path [ ; Changed count to length
+  ; 1. Determine Base Heading
+  ifelse not empty? my-path and path-index < length my-path [
     let next-patch item path-index my-path
-    if patch-here != next-patch [ ; Avoid facing self if already on the target patch
-       face next-patch
-    ]
+    if patch-here != next-patch [ face next-patch ]
   ] [
-    ; No path, or path completed - default to facing goal or stopping
     if my-goal-patch != nobody [
-       face my-goal-patch
-       ; If path is empty/finished and not at goal, signal for recalculation
-       if (empty? my-path or path-index >= length my-path) and patch-here != my-goal-patch [
-         set needs-path-recalculation? true
-         ; Agent will attempt to move towards goal patch for now, or wait if it can't.
-         ; Path will be recalculated by observer at the end of the 'go' tick.
-       ]
+      face my-goal-patch
+      if (empty? my-path or path-index >= length my-path) and patch-here != my-goal-patch [
+        set needs-path-recalculation? true
+      ]
     ]
-    ; Consider stopping the agent if path is done but not at goal?
-    ; set is-able-to-move? false ; This might be handled by recalculation failure
   ]
 
-  ; --- Perception Check (based on potentially new heading) ---
+  ; --- Perception Check ---
   let current-next-patch patch-at-heading-and-distance 1 0
-  let is-fixed-obstacle-ahead? false ; True if unpassable terrain/obstacle or edge of world
-  let is-turtle-ahead? false         ; True if another turtle is in the immediate next patch
+  let is-fixed-obstacle-ahead? false
+  let is-turtle-ahead? false
 
-  ifelse current-next-patch = nobody [ ; Edge of the world
+  ifelse current-next-patch = nobody [
     set is-fixed-obstacle-ahead? true
-  ] [
-    ; Check if the next patch is an obstacle OR not walkable
+  ]  [
     set is-fixed-obstacle-ahead? ([is-obstacle?] of current-next-patch or not [is-walkable?] of current-next-patch)
-    if not is-fixed-obstacle-ahead? [ ; Only check for turtles if no fixed obstacle
-       set is-turtle-ahead? any? other turtles-on current-next-patch
+    if not is-fixed-obstacle-ahead? [
+      set is-turtle-ahead? any? other turtles-on current-next-patch
     ]
   ]
 
   ; --- Decision Logic ---
+
+  ; Scenario 1: Fixed obstacle directly ahead
   if is-fixed-obstacle-ahead? [
-    ; Fixed obstacle (building, road, edge of world) is directly ahead
-    set is-able-to-move? false  ; Cannot move FORWARD this tick
+    set is-able-to-move? false
     set current-speed 0
-    bk 1 ; Move back one step to avoid the obstacle
-    rt (random-float 120) + 30  ; Turn significantly (30 to 150 degrees)
-    set needs-path-recalculation? true ; Signal observer to recalculate path
-    set neighbors-in-radius no-turtles ; Not basing movement on neighbors here
+    bk 1
+    rt (random-float 120) + 30
+    set needs-path-recalculation? true
+    set neighbors-in-radius no-turtles
     set stuck-timer stuck-timer + 1
-  ] ifelse is-turtle-ahead? [
-    ; Another turtle is directly ahead (but no fixed obstacle)
-    ; Attempt to avoid the other turtle using side-stepping or random turns
-    set is-able-to-move? false ; Assume can't move unless a clear path is found by avoidance
-    let avoidance-angle 30 ; Angle to try turning (degrees)
+  ]
+  ; Scenario 2: Turtle directly ahead (and no fixed obstacle)
+  if is-turtle-ahead? [
+    set is-able-to-move? false ; Assume can't move unless avoidance succeeds
+    let avoidance-angle 30
 
     ; Try turning right
     rt avoidance-angle
     let patch-right patch-at-heading-and-distance 1 0
-    let clear-right? false
-    if patch-right != nobody and [is-walkable?] of patch-right and not any? turtles-on patch-right [
-       set clear-right? true
-    ]
-
-    ifelse clear-right? [
-      ; Found clear path to the right
+    ifelse patch-right != nobody and [is-walkable?] of patch-right and not any? turtles-on patch-right [
       set is-able-to-move? true
-      ; Keep the new heading (already turned right)
-    ] [
+    ]  [
       ; Right is blocked, try left
       lt (2 * avoidance-angle) ; Turn back to original, then left
       let patch-left patch-at-heading-and-distance 1 0
-      let clear-left? false
-      if patch-left != nobody and [is-walkable?] of patch-left and not any? turtles-on patch-left [
-        set clear-left? true
-      ]
+      ifelse patch-left != nobody and [is-walkable?] of patch-left and not any? turtles-on patch-left [
+        set is-able-to-move? true
+      ]  [
+        ; Both sides blocked, restore original heading from left attempt and try random move
+        rt avoidance-angle ; Turn back to original heading (relative to facing left)
 
-      ifelse clear-left? [
-         ; Found clear path to the left
-         set is-able-to-move? true
-         ; Keep the new heading (already turned left)
-      ] [
-         ; Both sides blocked, restore original heading from left attempt and try random move
-         rt avoidance-angle ; Turn back to original heading (relative to facing left)
-
-         ; --- Attempt a random adjustment ---
-         let random-turn ((random 37) - 18) * 5 ; Try turning in 5-degree increments up to +/- 90 deg
-         rt random-turn
-         let patch-after-random-turn patch-at-heading-and-distance 1 0
-         ifelse patch-after-random-turn != nobody and [is-walkable?] of patch-after-random-turn and not any? turtles-on patch-after-random-turn [
-           set is-able-to-move? true
-           ; Heading is already set by rt random-turn
-         ] [
-           ; Random turn didn't find a clear spot, revert the random turn
-           lt random-turn
-           set is-able-to-move? false ; Still can't move this way
-         ]
+        let random-turn ((random 37) - 18) * 5
+        rt random-turn
+        let patch-after-random-turn patch-at-heading-and-distance 1 0
+        ifelse patch-after-random-turn != nobody and [is-walkable?] of patch-after-random-turn and not any? turtles-on patch-after-random-turn [
+          set is-able-to-move? true
+        ]  [
+          lt random-turn ; Random turn didn't find a clear spot, revert
+          ; is-able-to-move? remains false
+        ]
       ]
     ]
 
-    ; After all avoidance attempts for turtles (L/R/Random):
-    ifelse not is-able-to-move? [
-       set heading original-heading ; Face original intended direction if all avoidance failed
-       set current-speed 0          ; Cannot move this tick
-       set neighbors-in-radius no-turtles
-       set stuck-timer stuck-timer + 1 ; Increment stuck timer if unable to move due to another turtle
-    ]  [
-       ; A clear path was found after turtle avoidance
-       ; is-able-to-move? is true
-       ; --- Recalculate neighbors based on NEW heading ---
-       let nearby-turtles (turtles in-radius avoidance-radius)
-       set neighbors-in-radius other nearby-turtles
-       ; --- Calculate speed ---
-       let neighbor-count count neighbors-in-radius
-       let effective-radius max (list 0.1 avoidance-radius)
-       let density-factor ifelse-value (effective-radius > 0.01) [
-           (density-sensitivity * neighbor-count / (pi * effective-radius ^ 2))
-         ] [ 0 ]
-       let speed-factor max (list 0 (1 - density-factor))
-       set current-speed min (list desired-speed 1.0) * speed-factor
-       set current-speed max (list 0 current-speed)
-       set stuck-timer 0 ; Reset stuck timer if able to move
+    if not is-able-to-move? [
+      set heading original-heading
+      set current-speed 0
+      set neighbors-in-radius no-turtles
+      set stuck-timer stuck-timer + 1
     ]
-  ] [
-    ; Path directly ahead is clear (no fixed obstacle, no turtle)
-    ; is-able-to-move? is true
-    ; --- Recalculate neighbors based on CURRENT heading (towards goal) ---
+    ; If is-able-to-move? is true here, heading is already adjusted from successful avoidance
+  ]
+  ; Scenario 3: Path directly ahead is clear (no fixed obstacle, no turtle)
+  ; In this case, is-able-to-move? remains true from its initial setting.
+
+  ; --- Calculate Speed and Neighbors (if able to move) ---
+  if is-able-to-move? [
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
-    ; --- Determine speed ---
     let neighbor-count count neighbors-in-radius
     let effective-radius max (list 0.1 avoidance-radius)
     let density-factor ifelse-value (effective-radius > 0.01) [
@@ -424,19 +384,19 @@ to decide-movement
     let speed-factor max (list 0 (1 - density-factor))
     set current-speed min (list desired-speed 1.0) * speed-factor
     set current-speed max (list 0 current-speed)
-    set stuck-timer 0 ; Reset stuck timer if able to move
+    set stuck-timer 0 ; Reset stuck timer
   ]
+  ; If not is-able-to-move? from fixed obstacle or failed turtle avoidance, current-speed was already set to 0.
 
   ; --- Check if agent is stuck for too long ---
-  if stuck-timer > patience [ ; If stuck for more than patience level
-    ; Try a more drastic evasive maneuver
-    rt (random-float 180) - 90 ; Turn a random angle between -90 and 90 degrees
+  if stuck-timer > patience [
+    rt (random-float 180) - 90
     let temp-patch-ahead patch-at-heading-and-distance 1 0
     if temp-patch-ahead != nobody and [is-walkable?] of temp-patch-ahead [
-      fd 1 ; Try to move one step only if safe
+      fd 1
     ]
-    set needs-path-recalculation? true ; Recalculate path after this desperation move
-    set stuck-timer 0 ; Reset stuck timer after attempting to unstick
+    set needs-path-recalculation? true
+    set stuck-timer 0
   ]
 end
 
