@@ -411,7 +411,7 @@ to decide-movement
     ]
   ] [
     ; Path directly ahead is clear (no fixed obstacle, no turtle)
-    ; is-able-to-move? is true 
+    ; is-able-to-move? is true
     ; --- Recalculate neighbors based on CURRENT heading (towards goal) ---
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
@@ -437,35 +437,47 @@ to decide-movement
     ]
     set needs-path-recalculation? true ; Recalculate path after this desperation move
     set stuck-timer 0 ; Reset stuck timer after attempting to unstick
-    show (word "Stuck for too long! Recalculating path... " my-id)    show (word "Stuck for too long! Recalculating path... " my-id)
   ]
 end
 
 to move
   ; Agent executes the movement if possible
   if is-able-to-move? and current-speed > 0 [
-    ; Check the patch at the intended destination
     let destination-patch patch-at-heading-and-distance current-speed 0
-    ; Also check the patch immediately in front if speed > 1 to prevent jumping over walls
-    let immediate-next-patch patch-at-heading-and-distance 1 0
+    let can-safely-move? false ; Flag to determine if movement is ultimately allowed
 
-    ifelse destination-patch != nobody and [is-walkable?] of destination-patch and
-       (current-speed <= 1 or (immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch))
-    [
+    ; Check if the final destination patch is initially valid
+    if destination-patch != nobody and [is-walkable?] of destination-patch [
+      ifelse current-speed <= 1 [
+        ; If speed is 1 or less, and destination is walkable, it's fine
+        set can-safely-move? true
+      ]  [
+        ; If speed > 1, must also check the immediate next patch to prevent jumping walls
+        let immediate-next-patch patch-at-heading-and-distance 1 0
+        if immediate-next-patch != nobody and [is-walkable?] of immediate-next-patch [
+          ; Both destination and intermediate step are walkable
+          set can-safely-move? true
+        ]
+        ; If immediate-next-patch is not walkable, can-safely-move? remains false
+      ]
+    ]
+    ; If destination-patch itself was not initially valid, can-safely-move? remains false
+
+    ifelse can-safely-move? [
       ; It's safe to move
       ; Basic forward movement
       fd current-speed
 
       ; --- Update Path Index ---
       ; If we have a path and have reached (or are very close to) the center of the target patch
-      if not empty? my-path and path-index < length my-path [ ; Changed count to length
+      if not empty? my-path and path-index < length my-path [
          let target-patch item path-index my-path
          if patch-here = target-patch [
             set path-index path-index + 1 ; Move to the next point in the path
          ]
       ]
     ]  [
-      ; Intended move is into an obstacle or off the world
+      ; Intended move is into an obstacle or off the world, or trying to jump an obstacle
       set current-speed 0 ; Stop
       set needs-path-recalculation? true ; Good idea to recalculate if planned move failed
       set stuck-timer stuck-timer + 1 ; Count this as being stuck
