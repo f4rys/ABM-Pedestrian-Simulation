@@ -6,6 +6,8 @@
 
 globals [
   total-agents-created      ; Counter for all created agents
+  goal-patches-agentset     ; Cached agentset of all goal patches
+  spawn-patches-agentset    ; Cached agentset of all spawn patches
 ]
 
 patches-own [
@@ -136,15 +138,19 @@ to setup-environment
   ask patches [
     set walkable-neighbors-cache neighbors with [is-walkable?]
   ]
+
+  ; --- Cache Goal and Spawn Patches ---
+  set goal-patches-agentset patches with [is-goal-area? = true]
+  set spawn-patches-agentset patches with [is-spawn-area? = true]
 end
 
 to setup-pedestrians
   ; Ensure there are spawnable and goal patches available
-  if not any? patches with [is-spawn-area? = true] [
+  if not any? spawn-patches-agentset [
     show "Error: No spawn area patches found!"
     stop
   ]
-  if not any? patches with [is-goal-area? = true] [
+  if not any? goal-patches-agentset [
     show "Error: No goal area patches found!"
     stop
   ]
@@ -176,10 +182,10 @@ to setup-pedestrians
 
       ; --- Initial Position and Goal ---
       ; Place agents randomly in a spawn area
-      move-to one-of patches with [is-spawn-area? = true and not any? turtles-here] ; Try to avoid stacking
+      move-to one-of spawn-patches-agentset with [not any? turtles-here] ; Try to avoid stacking
 
       ; Assign a goal patch in a goal area
-      set my-goal-patch one-of patches with [is-goal-area? = true]
+      set my-goal-patch one-of goal-patches-agentset
 
       ; --- Calculate Initial Path ---
       ; BFS vars were just reset by the observer before this turtle was created
@@ -213,7 +219,7 @@ to go
     ; Assign a new goal patch, ensuring it's different from the current one (patch-here)
     let new-goal nobody
     while [new-goal = nobody or new-goal = patch-here] [
-      set new-goal one-of patches with [is-goal-area? = true]
+      set new-goal one-of goal-patches-agentset
     ]
     set my-goal-patch new-goal
 
