@@ -18,6 +18,8 @@ patches-own [
   ; --- BFS Variables ---
   visited?                  ; Flag used during BFS pathfinding (Boolean)
   predecessor               ; Patch from which this patch was reached during BFS (Patch object)
+
+  walkable-neighbors-cache  ; Cached list of walkable neighbor patches
 ]
 
 turtles-own [
@@ -127,6 +129,11 @@ to setup-environment
       set is-spawn-area? false
       print (word "Warning: Unknown character found. Treated as obstacle.")
     ])
+  ]
+
+  ; --- Cache Walkable Neighbors ---
+  ask patches [
+    set walkable-neighbors-cache neighbors with [is-walkable?]
   ]
 end
 
@@ -262,7 +269,7 @@ to-report find-path-bfs [start-patch goal-patch]
       ; Explore neighbors
       ask current-patch [
         ; Consider neighbors that are walkable and not yet visited
-        let valid-neighbors neighbors with [ is-walkable? and not visited? ]
+        let valid-neighbors walkable-neighbors-cache with [ not visited? ] ; Use cached neighbors
         ask valid-neighbors [
           set visited? true
           set predecessor current-patch ; Record where we came from
