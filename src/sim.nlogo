@@ -32,6 +32,7 @@ turtles-own [
   patience                  ; Patience (e.g., number of ticks waiting at an intersection)
   density-sensitivity       ; Coefficient determining how much the agent slows down in a crowd
   avoidance-radius          ; Distance at which the agent starts avoiding others/obstacles
+  my-effective-avoidance-area ; Cached value of pi * effective-radius^2
   wiggle-angle              ; Maximum angle of random deviation from the direction of movement
 
   ; --- Agent State and Perception ---
@@ -168,6 +169,10 @@ to setup-pedestrians
       set density-sensitivity (min-density-sensitivity + random-float (max-density-sensitivity - min-density-sensitivity))
       set avoidance-radius (min-avoidance-radius + random-float (max-avoidance-radius - min-avoidance-radius))
       set wiggle-angle (min-wiggle-angle + random (max-wiggle-angle - min-wiggle-angle))
+
+      ; Pre-calculate effective avoidance area
+      let effective-radius max (list 0.1 avoidance-radius) ; Ensure radius is not zero for area calculation
+      set my-effective-avoidance-area (pi * effective-radius ^ 2)
 
       ; --- Initial Position and Goal ---
       ; Place agents randomly in a spawn area
@@ -384,9 +389,8 @@ to decide-movement
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
     let neighbor-count count neighbors-in-radius
-    let effective-radius max (list 0.1 avoidance-radius)
-    let density-factor ifelse-value (effective-radius > 0.01) [
-        (density-sensitivity * neighbor-count / (pi * effective-radius ^ 2))
+    let density-factor ifelse-value (my-effective-avoidance-area > 0.01) [ ; Use cached area
+        (density-sensitivity * neighbor-count / my-effective-avoidance-area)
       ] [ 0 ]
     let speed-factor max (list 0 (1 - density-factor))
     set current-speed min (list desired-speed 1.0) * speed-factor
