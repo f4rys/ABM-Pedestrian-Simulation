@@ -227,7 +227,7 @@ to go
   let turtles-to-recalculate turtles with [needs-path-recalculation? = true and not is-at-goal?]
   if any? turtles-to-recalculate [
     ; Observer iterates through each turtle needing recalculation
-    foreach sort turtles-to-recalculate [ a-turtle ->
+    foreach ([self] of turtles-to-recalculate) [ a-turtle ->
       reset-bfs-vars ; Observer calls reset for this specific turtle's upcoming pathfind
       ask a-turtle [ ; Switch to this specific turtle's context for pathfinding
         set my-path find-path-bfs patch-here my-goal-patch
