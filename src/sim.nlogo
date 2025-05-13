@@ -705,6 +705,58 @@ NIL
 HORIZONTAL
 
 @#$#@#$#@
+## Pedestrian Dynamics Simulation
+
+**WHAT IS IT?**
+
+This model simulates the movement of pedestrians in a simplified urban environment. It focuses on how individual differences in pedestrian behavior (or "personalities") affect overall traffic flow, density patterns, and the emergence of congestion. Agents (pedestrians) navigate sidewalks and crossings to reach their target destinations (doors), avoiding buildings, roads, and each other.
+
+**HOW IT WORKS**
+
+The simulation environment is a 2D grid loaded from a `map.txt` file, where different characters define terrain types:
+  
+*   `D`: Door (goal area, red)
+*   `S`: Sidewalk (walkable, spawn area, green)
+*   `C`: Crossing (walkable, white)
+*   `B`: Building (obstacle, brown)
+*   `R`: Road (obstacle, gray)
+
+Each pedestrian agent has a unique set of "personality" parameters, randomly assigned at creation from ranges set by the interface sliders. These include:
+
+*   `desired-speed`: How fast the agent wants to move.
+*   `patience`: How long an agent waits when blocked before trying to find a new path.
+*   `density-sensitivity`: How much an agent slows down in crowded areas.
+*   `avoidance-radius`: The distance at which an agent reacts to others.
+*   `wiggle-angle`: Randomness in movement direction.
+
+Agents use a Breadth-First Search (BFS) algorithm to find the shortest path to their current `my-goal-patch`.
+
+*   If an agent's path is blocked by a fixed obstacle, it attempts to move back, turn, and recalculate its path.
+*   If blocked by another agent, it tries to turn slightly right, then left, or makes a random turn to find a clear path. If it remains stuck beyond its `patience` limit, it will make a more significant random turn and request a path recalculation.
+*   Agent speed is adjusted based on `desired-speed` and local agent density.
+*   When an agent reaches its goal, it becomes temporarily invisible, waits for a random duration (50-200 ticks), then reappears at its current location, is assigned a new random goal, and calculates a new path.
+
+The simulation proceeds in discrete time steps (`ticks`).
+
+**HOW TO USE IT**
+
+1.  **Adjust Sliders (Optional):**
+    *   `initial-agent-number`: Set the number of pedestrians in the simulation.
+    *   `min/max-desired-speed`: Define the range for agents' preferred walking speeds.
+    *   `min/max-patience`: Define the range for how long agents will wait when stuck.
+    *   `min/max-avoidance-radius`: Define the range for agents' perception distance for avoiding others.
+    *   `min/max-wiggle-angle`: Define the range for the randomness in agents' movement.
+    *   `min/max-density-sensitivity`: Define the range for how sensitive agents are to nearby crowds.
+2.  **Press `setup`:** This button initializes the environment by loading the map from `map.txt`, creates the specified number of agents with randomized personalities, and assigns them initial goals and paths.
+3.  **Press `go`:** This button runs the simulation. Pressing it once advances the simulation by one time step. Holding it down (or using the slider next to it to control speed) runs the simulation continuously.
+
+**MODEL DETAILS**
+
+*   **Pathfinding:** Breadth-First Search (BFS) on walkable patches.
+*   **Collision Avoidance:** Rule-based local maneuvers and path recalculation.
+*   **Heterogeneity:** Achieved by randomizing agent "personality" parameters within user-defined ranges.
+*   **Map:** Defined in `map.txt` (300x180 cells).
+
 @#$#@#$#@
 default
 true
