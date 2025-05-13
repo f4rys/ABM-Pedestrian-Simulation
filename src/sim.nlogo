@@ -547,8 +547,8 @@ SLIDER
 initial-agent-number
 initial-agent-number
 1
-1000
-52.0
+500
+200.0
 1
 1
 NIL
@@ -592,7 +592,7 @@ SLIDER
 min-patience
 min-patience
 1
-10
+50
 5.0
 1
 1
@@ -607,8 +607,8 @@ SLIDER
 max-patience
 max-patience
 1
-10
-7.0
+50
+35.0
 1
 1
 NIL
@@ -623,7 +623,7 @@ min-avoidance-radius
 min-avoidance-radius
 1
 3
-1.5
+1.0
 1
 1
 NIL
@@ -698,7 +698,7 @@ max-density-sensitivity
 max-density-sensitivity
 0.5
 1.5
-0.8
+1.5
 0.1
 1
 NIL
