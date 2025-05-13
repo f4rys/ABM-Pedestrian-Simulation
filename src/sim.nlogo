@@ -392,6 +392,12 @@ to decide-movement
 
   ; --- Calculate Speed and Neighbors (if able to move) ---
   if is-able-to-move? [
+    ; Apply wiggle if the agent is able to move
+    if wiggle-angle > 0 [
+      let random-wiggle (random-float wiggle-angle) - (wiggle-angle / 2)
+      rt random-wiggle
+    ]
+
     let nearby-turtles (turtles in-radius avoidance-radius)
     set neighbors-in-radius other nearby-turtles
     let neighbor-count count neighbors-in-radius
